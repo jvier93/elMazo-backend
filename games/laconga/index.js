@@ -1,0 +1,623 @@
+const formatMessage = require("./../../utils/messages");
+const {
+  userJoin,
+  createUser,
+  getCurrentUser,
+  userLeave,
+} = require("./../../utils/Users");
+const {
+  createGame,
+  getGame,
+  getAllGames,
+  removeGame,
+  startTimer,
+  stopTimer,
+} = require("./../../utils/Games");
+
+function nspLaConga(io) {
+  const nsp = io.of("/LaConga");
+
+  nsp.on("connection", (socket) => {
+    console.log("Un usuario se ha conectado...");
+
+    socket.on("createUser", (nombre) => {
+      const user = createUser(socket.id, nombre);
+
+      socket.emit("updateUserRoom", user.room);
+
+      //Para obtener la lista de rooms existente
+      const games = getAllGames();
+      socket.emit("updateRoomList", games);
+      socket.emit(
+        "message",
+        formatMessage("server bot", `Bienvenido ${user.username}!`)
+      );
+    });
+
+    socket.on("createRoom", (roomName, password, points, timePerPlayer) => {
+      const user = getCurrentUser(socket.id); //buscamos el usuario
+      const currentGame = getGame(roomName); //buscamos el game
+
+      //si no existe un game
+      if (!currentGame) {
+        //Creamos un game (la room) y le añadimos el user como nuevo player
+        const laConga = createGame(roomName, password, points, timePerPlayer);
+
+        laConga.addPlayer(user);
+        //Con esta funcion hacemos admin a ese primer jugador
+        laConga.checkAdmin();
+
+        //Añadimos el player a esa room tanto en socketio como en users
+        socket.join(roomName);
+        userJoin(socket.id, roomName);
+
+        //decimos que le avise al cliente que la room del usuario ha cambiado
+        nsp.to(user.room).emit("updateUserRoom", user.room);
+
+        //Para obtener la lista de rooms existente
+        const games = getAllGames();
+
+        nsp.emit("updateRoomList", games);
+
+        //Bienvenida a mi usuario
+        socket.emit(
+          "message",
+          formatMessage("server bot", `Bienvenido a la sala ${user.username}!`)
+        );
+
+        //Broadcast de bienvenida a los demas
+        socket.broadcast
+          .to(roomName)
+          .emit(
+            "message",
+            formatMessage(
+              "server bot",
+              `${user.username} se ha unido a la sala`
+            )
+          );
+
+        nsp.to(roomName).emit("updateDeck", laConga.deck);
+        nsp
+          .to(roomName)
+          .emit("updatePlayers", laConga.players, laConga._gameStatus);
+      } else {
+        //Avisamos que ya existe una room con ese nombre
+        socket.emit(
+          "message",
+          formatMessage("server bot", `Ya existe una room con ese nombre`)
+        );
+      }
+    });
+
+    socket.on("joinGameRoom", (roomName, password) => {
+      const user = getCurrentUser(socket.id); //buscamos el usuario
+      const gameToJoin = getGame(roomName).game; //buscamos el game al que queremos unirnos
+
+      if (gameToJoin) {
+        if (gameToJoin.players.length < 3) {
+          if (gameToJoin.wasStarted === "true") {
+            //Avisamos que el juego no esta en pausa
+            socket.emit(
+              "message",
+              formatMessage("server bot", `Este juego ya comenzo`)
+            );
+            return;
+          }
+
+          if (gameToJoin.gamePassword === password) {
+            gameToJoin.addPlayer(user);
+
+            //Añadimos el player a esa room tanto en socketio como en users
+            socket.leave("#000");
+            socket.join(roomName);
+            userJoin(socket.id, roomName);
+
+            //decimos que le avise al cliente que la room del usuario ha cambiado
+            nsp.to(user.room).emit("updateUserRoom", user.room);
+
+            //Para obtener la lista de rooms existente
+            const games = getAllGames();
+            nsp.emit("updateRoomList", games);
+
+            //Bienvenida a mi usuario
+            socket.emit(
+              "message",
+              formatMessage(
+                "server bot",
+                `Bienvenido a la sala ${user.username}!`
+              )
+            );
+
+            //Broadcast de bienvenida a los demas
+            socket.broadcast
+              .to(roomName)
+              .emit(
+                "message",
+                formatMessage(
+                  "server bot",
+                  `${user.username} se ha unido a la sala`
+                )
+              );
+
+            nsp.to(roomName).emit("updateDeck", gameToJoin.deck);
+
+            nsp
+              .to(roomName)
+              .emit(
+                "updatePlayers",
+                gameToJoin.players,
+                gameToJoin._gameStatus
+              );
+          } else {
+            //Avisamos que la password no es correcta
+            socket.emit(
+              "message",
+              formatMessage("server bot", `Contraseña incorrecta`)
+            );
+          }
+        } else {
+          //Avisamos que ya se alcanzo el limite de players
+          socket.emit(
+            "message",
+            formatMessage("server bot", `Se llego al limite de players`)
+          );
+        }
+      } else {
+        //Avisamos que no existe esa room
+        socket.emit(
+          "message",
+          formatMessage("server bot", `No existe esa room`)
+        );
+      }
+    });
+
+    //Evento cuando comienza el juego
+    socket.on("startGame", () => {
+      const user = getCurrentUser(socket.id);
+      const laConga = getGame(user.room).game;
+
+      //Si el juego esta iniciado notificarlo y retronar
+      if (laConga.gameStatus === "iniciado") {
+        return nsp
+          .to(user.room)
+          .emit(
+            "message",
+            formatMessage("server bot", `Las cartas ya fueron repartidas`)
+          );
+      }
+
+      //Si en el juego no hay players suficientes notificamos y retornamos
+      if (laConga.players.length <= 1) {
+        return nsp
+          .to(user.room)
+          .emit(
+            "message",
+            formatMessage(
+              "server bot",
+              `Debe haber mas de un jugador para iniciar`
+            )
+          );
+      }
+
+      //Si el juego ya ha sido ganado notificamos y retornamos
+      if (laConga.hasWinPlayer(laConga.rules.score)) {
+        return nsp
+          .to(user.room)
+          .emit("message", formatMessage("server bot", `Hay un ganador`));
+      }
+
+      laConga.startGame();
+      startTimer(user.room, nsp);
+
+      //Actualizamos la lista de rooms
+      const games = getAllGames();
+      nsp.emit("updateRoomList", games);
+
+      nsp
+        .to(user.room)
+        .emit("message", formatMessage("server bot", `El juego ha comenzado!`));
+      nsp.to(user.room).emit("updateDeck", laConga.deck);
+      nsp.to(user.room).emit("updateTable", laConga.table);
+      nsp.to(user.room).emit("updateCutTable", laConga.cutTable);
+      nsp.to(user.room).emit("showFrontCards", false);
+      nsp.to(user.room).emit("updateGameStatus", laConga._gameStatus);
+      nsp
+        .to(user.room)
+        .emit("updatePlayers", laConga.players, laConga._gameStatus);
+    });
+
+    socket.on("cardsForTableToDeck", () => {
+      const user = getCurrentUser(socket.id);
+      const room = user.room;
+      const laConga = getGame(room).game;
+
+      if (laConga._gameStatus === "pausa") {
+        return;
+      }
+
+      laConga.tableToDeck();
+    });
+
+    //Evento cuando se levanta una carta de la baraja
+    socket.on("raiseCard", () => {
+      const user = getCurrentUser(socket.id);
+      const room = user.room;
+      const laConga = getGame(room).game;
+
+      if (laConga._gameStatus === "pausa") {
+        return;
+      }
+
+      const player = laConga.findPlayer(socket.id);
+
+      if (player.inTurn && player.hand.length === 7) {
+        player.recieveCard(laConga.deck.dealOne());
+        laConga.findAndBuildGames(socket.id);
+        nsp
+          .to(user.room)
+          .emit("updatePlayers", laConga.players, laConga._gameStatus);
+
+        if (laConga.deck.cards.length === 0) {
+          laConga.tableToDeck();
+          nsp.to(user.room).emit("updateDeck", laConga.deck);
+          nsp.to(user.room).emit("updateTable", laConga.table);
+          nsp
+            .to(user.room)
+            .emit(
+              "message",
+              formatMessage(
+                "server bot",
+                "Se transfirio de la mesa a la baraja"
+              )
+            );
+        } else {
+          nsp.to(user.room).emit("updateDeck", laConga.deck);
+        }
+      } else {
+        socket.emit(
+          "message",
+          formatMessage(
+            "server bot",
+            `Debe ser su turno y tener 7 cartas para levantar una`
+          )
+        );
+      }
+    });
+
+    //Evento cuando se levanta una carta de la mesa
+    socket.on("raiseTableCard", () => {
+      const user = getCurrentUser(socket.id);
+      const room = user.room;
+      const laConga = getGame(room).game;
+
+      if (laConga._gameStatus === "pausa") {
+        return;
+      }
+
+      const player = laConga.findPlayer(socket.id);
+
+      if (player.inTurn && player.hand.length === 7) {
+        player.recieveCard(laConga.table.removeCard());
+        laConga.findAndBuildGames(socket.id);
+        nsp
+          .to(user.room)
+          .emit("updatePlayers", laConga.players, laConga._gameStatus);
+        nsp.to(user.room).emit("updateTable", laConga.table);
+      } else {
+        socket.emit(
+          "message",
+          formatMessage(
+            "server bot",
+            `Debe ser su turno y tener 7 cartas para levantar una`
+          )
+        );
+      }
+    });
+
+    //Evento cuando se "corta" el juego
+    socket.on("cutGame", (indexOfCardToCutGame) => {
+      const notifyWinOrLose = function ({ nsp, game, user }) {
+        const scoreLimit = game.rules.score;
+
+        const extractPointsDetailOfPlayers = function (players, scoreLimit) {
+          const playersDetail = [];
+          players.forEach((player) => {
+            playersDetail.push({
+              socketId: player._socketId,
+              name: player._name,
+              score: player._score,
+              scoreLimit,
+            });
+          });
+          return playersDetail;
+        };
+
+        const playersDetail = extractPointsDetailOfPlayers(
+          game.players,
+          scoreLimit
+        );
+        const gameHasWinPlayer = game.hasWinPlayer(scoreLimit);
+
+        if (gameHasWinPlayer) {
+          //Si hay un ganador queremos brindar un mensaje "personalizado al que gano"
+
+          //buscamos el player ganador la variables a continuacion guardan su detalle
+          let playerWinner = game.players.find((player) => {
+            return player.score < scoreLimit;
+          });
+          let playerWinnerSocketId = playerWinner.socketId;
+          let playerWinnerName = playerWinner.name;
+
+          //recorremos este array que contiene a todos los players en este juego
+          game.players.forEach((player) => {
+            //si el player que estamos procesando en este step concide con el que gano el juego
+            if (player.socketId === playerWinnerSocketId) {
+              //le enviamos un mensaje personalizado.
+              nsp.to(player.socketId).emit("playerNotification", {
+                showModal: true,
+                modalMessage: {
+                  title: "Has ganado el juego",
+                  body: "pulsa aceptar para volver a la sala principal",
+                },
+                scoreDetails: playersDetail,
+                modalMode: "endGameNotification",
+              });
+              //al resto le enviamos un mensaje con el nombre del ganador.
+            } else {
+              nsp.to(player.socketId).emit("playerNotification", {
+                showModal: true,
+                modalMessage: {
+                  title: `${playerWinnerName} ha ganado el juego`,
+                  body: "pulsa aceptar para volver a la sala principal",
+                },
+                scoreDetails: playersDetail,
+                modalMode: "endGameNotification",
+              });
+            }
+          });
+
+          return;
+        }
+
+        game.players.map((player) => {
+          if (player.score >= scoreLimit) {
+            nsp.to(player.socketId).emit("playerNotification", {
+              showModal: true,
+              modalMessage: {
+                title: `${user.username} gano esta ronda`,
+                body: `llegaste al limite de puntos - ${scoreLimit} puedes salir pulsando aceptar`,
+              },
+              scoreDetails: playersDetail,
+              modalMode: "endRoundNotification",
+            });
+          } else {
+            nsp.to(player.socketId).emit("playerNotification", {
+              showModal: true,
+              modalMessage: {
+                title: `${user.username} gano esta ronda`,
+                body: "",
+              },
+              scoreDetails: playersDetail,
+              modalMode: "endRoundNotification",
+            });
+          }
+        });
+      };
+
+      const user = getCurrentUser(socket.id);
+
+      const room = user.room;
+      const laConga = getGame(room).game;
+
+      const player = laConga.findPlayer(socket.id);
+      //Si es el turno del jugador este tiene dos juegos y en su mano hay 8 cartas
+      if (
+        player.inTurn &&
+        player.games.length === 2 &&
+        player.hand.length === 8
+      ) {
+        //Tiramos la carta con la cual cortamos a la mesa de corte (cutTable)
+        laConga.cutTable.addCard(player.playCard(indexOfCardToCutGame));
+        //Contamos los puntos
+        laConga.scorePoints();
+        stopTimer(room, nsp);
+        laConga.gameStatus = "pausa";
+
+        notifyWinOrLose({ nsp, game: laConga, user });
+
+        //Actualizamos las vistas
+        nsp.to(user.room).emit("updateGameStatus", laConga._gameStatus);
+        nsp
+          .to(user.room)
+          .emit("updatePlayers", laConga.players, laConga._gameStatus);
+        nsp.to(user.room).emit("showFrontCards", true);
+        nsp.to(user.room).emit("updateCutTable", laConga.cutTable);
+
+        //Actualizamos la lista de rooms ya que el juego se pauso (el estado del juego lo mostramos en la lista de rooms)
+        const games = getAllGames();
+        nsp.emit("updateRoomList", games);
+      }
+    });
+
+    //Evento cuando se juega una carta
+    socket.on("playCard", (playedCardIndex) => {
+      const user = getCurrentUser(socket.id);
+      const room = user.room;
+      const laConga = getGame(room).game;
+
+      if (laConga._gameStatus === "pausa") {
+        return;
+      }
+
+      const player = laConga.findPlayer(socket.id);
+      //Si es el turno del jugador y en su mano hay 8 cartas
+      if (player.inTurn && player.hand.length === 8) {
+        //Llamo a la funciones que corresponden con jugar una carta
+        //añado una carta a la mesa, cual? la que el jugador quiere tirar
+        laConga.table.addCard(player.playCard(playedCardIndex));
+        //Evaluamos si existen juegos en el orden que quedaron las cartas
+        laConga.findAndBuildGames(socket.id);
+
+        //Si el juego no tiene un unico jugador reseteamos el timer y cambiamos de turno, si no no tendria sentido.
+        if (laConga._players.length !== 1) {
+          stopTimer(room, nsp);
+          laConga.setTurn();
+          startTimer(room, nsp);
+        }
+
+        //Actualizamos las vistas
+        nsp
+          .to(user.room)
+          .emit("updatePlayers", laConga.players, laConga._gameStatus);
+        nsp.to(user.room).emit("updateTable", laConga.table);
+        nsp
+          .to(user.room)
+          .emit(
+            "message",
+            formatMessage(
+              "server bot",
+              `turno de ${laConga.players[laConga.indexOfPlayerTurn].name} `
+            )
+          );
+      } else {
+        socket.emit(
+          "message",
+          formatMessage("server bot", `Debe tener 8 cartas para tirar una`)
+        );
+      }
+    });
+
+    //Evento cuando ordenamos cartas en nuestra mano
+    socket.on("reorderCards", (cartas) => {
+      const room = getCurrentUser(socket.id).room;
+      const laConga = getGame(room).game;
+      laConga.sortPlayerCards(socket.id, cartas);
+      laConga.findAndBuildGames(socket.id);
+
+      socket.emit("updateMyHand", laConga.players);
+    });
+
+    socket.on("playerLeave", () => {
+      const user = getCurrentUser(socket.id);
+      playerLeave(user, true);
+    });
+
+    function playerLeave(user, leaveNoDisconnect) {
+      const userRoom = user.room;
+      if (userRoom !== "#000") {
+        //Busco la instancia en la que estaba participando
+        const currentGame = getGame(userRoom).game;
+
+        if (currentGame._gameStatus !== "pausa") {
+          //Si el jugador que se fue tenia el turno o era mano debemos setear de nuevo estos valores al siguiente jugador en la instancia ("lista"), ANTES de eliminarlo de la misma
+          if (
+            currentGame._players[currentGame._indexOfPlayerTurn]._socketId ===
+              user.id &&
+            currentGame._players.length > 1
+          ) {
+            stopTimer(userRoom, nsp);
+            currentGame.removePlayer(user.id);
+            currentGame.setHand();
+            currentGame.setTurn();
+            startTimer(userRoom, nsp);
+          } else {
+            currentGame.removePlayer(user.id);
+            currentGame.setHand();
+          }
+        }
+        if (currentGame._gameStatus === "pausa") {
+          currentGame.removePlayer(user.id);
+          currentGame.setHand();
+        }
+
+        if (leaveNoDisconnect) {
+          socket.leave(userRoom);
+          socket.join("#000");
+          userJoin(user.id, "#000");
+          socket.emit("updateUserRoom", "#000");
+        }
+
+        //Si la instancia de juego tiene mas de un player:
+        if (currentGame._players.length > 1) {
+          //no sabemos si el jugador que se desconecto es el admin, por ello chequeamos y hacemos admin al primero
+          currentGame.checkAdmin();
+
+          //Actualizamos la baraja ya que las cartas que tenia el jugador volvieron a la baraja
+          nsp.to(userRoom).emit("updateDeck", currentGame.deck);
+          //Actualizamos la vista de los jugadores que aun quedan en esta estancia
+          nsp
+            .to(userRoom)
+            .emit(
+              "updatePlayers",
+              currentGame.players,
+              currentGame._gameStatus
+            );
+          nsp
+            .to(userRoom)
+            .emit(
+              "message",
+              formatMessage(
+                "server bot",
+                `${user.username} se ha ido de la sala`
+              )
+            );
+
+          //Actualizamos la lista de rooms ya que se hicieron cambios
+          const games = getAllGames();
+          nsp.emit("updateRoomList", games);
+        } else if (currentGame._players.length === 1) {
+          //Detenemos el timer ¿para que querriamos uno si estamos solos en la sala? y tambien pausamos el juego, solo no vamos a jugar.
+          stopTimer(userRoom, nsp);
+          currentGame.gameStatus = "pausa";
+          //no sabemos si el jugador que se desconecto es el admin, por ello chequeamos y hacemos admin al primero
+          currentGame.checkAdmin();
+
+          //Actualizamos la baraja ya que las cartas que tenia el jugador volvieron a la baraj
+          nsp.to(userRoom).emit("updateDeck", currentGame.deck);
+          //Enviamos la actualizacion de estado del game
+          nsp.to(userRoom).emit("updateGameStatus", currentGame._gameStatus);
+          //Actualizamos la vista de los jugadores que aun quedan en esta estancia
+          nsp
+            .to(userRoom)
+            .emit(
+              "updatePlayers",
+              currentGame.players,
+              currentGame._gameStatus
+            );
+          nsp
+            .to(userRoom)
+            .emit(
+              "message",
+              formatMessage(
+                "server bot",
+                `${user.username} se ha ido de la sala`
+              )
+            );
+
+          //Actualizamos la lista de rooms ya que se hicieron cambios
+          const games = getAllGames();
+          nsp.emit("updateRoomList", games);
+
+          //Si el juego no tiene players no vale la pena hacer nada mas que removerlo
+        } else if (currentGame._players.length === 0) {
+          removeGame(userRoom);
+          //Actualizamos la lista de games ya que se elimino uno
+          const games = getAllGames();
+          nsp.emit("updateRoomList", games);
+        }
+      }
+    }
+
+    //Evento cuando un usuario se desconecta
+    socket.on("disconnect", () => {
+      console.log("Un usuario se ha desconectado...");
+      const user = userLeave(socket.id); //Elimino al user del array de users, la funcion tambien lo devuelve
+
+      if (user) {
+        playerLeave(user);
+      }
+    });
+  });
+}
+
+module.exports = nspLaConga;
