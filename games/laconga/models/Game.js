@@ -155,7 +155,7 @@ class Game {
 
       //Armamos todo el juego de nuevo
       this.deck.buildDeck();
-      //this.deck.shuffle();
+      this.deck.shuffle();
       this.setHand();
       this.setTurn(this.indexOfPlayerTurn);
       this.dealCards();
