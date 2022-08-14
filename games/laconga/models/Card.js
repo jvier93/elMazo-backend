@@ -4,9 +4,9 @@ class Card {
     this._number = number;
     this._imgBack = "./imagenesBaraja/reverso.gif";
     this._imgBack75 = "./imagenesBaraja/reverso75.gif";
-    this._imgFront = `./imagenesBaraja/${suit}/${number}${suit.toLowerCase()}.png`;
-    this._imgFront75 = `./imagenesBaraja/${suit}/${number}${suit}75.gif`;
-    this._imgFrontGame = `./imagenesBaraja/${suit}/${number}${suit.toLowerCase()}-game.png`;
+    this._imgFront = `./imagenesBaraja/${suit.toLowerCase()}/${number}${suit.toLowerCase()}.png`;
+    this._imgFront75 = `./imagenesBaraja/${suit.toLowerCase()}/${number}${suit}75.gif`;
+    this._imgFrontGame = `./imagenesBaraja/${suit.toLowerCase()}/${number}${suit.toLowerCase()}-game.png`;
     this._inGame = "";
   }
 
