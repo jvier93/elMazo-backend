@@ -5,8 +5,9 @@ class Card {
     this._imgBack = "./imagenesBaraja/reverso.gif";
     this._imgBack75 = "./imagenesBaraja/reverso75.gif";
     this._imgFront = `./imagenesBaraja/${suit.toLowerCase()}/${number}${suit.toLowerCase()}.png`;
-    this._imgFront75 = `./imagenesBaraja/${suit.toLowerCase()}/${number}${suit.toLowerCase()}75.gif`;
+    this._imgFront75 = `./imagenesBaraja/${suit.toLowerCase()}/${number}${suit.toLowerCase()}75.png`;
     this._imgFrontGame = `./imagenesBaraja/${suit.toLowerCase()}/${number}${suit.toLowerCase()}-game.png`;
+    this._imgFrontGame75 = `./imagenesBaraja/${suit.toLowerCase()}/${number}${suit.toLowerCase()}-game75.png`;
     this._inGame = "";
   }
 
