@@ -79,6 +79,7 @@ function startTimer(timerTo, socketIoObject) {
 function stopTimer(gameToRemoveTimer, socketIoObject) {
   const gameData = getGame(gameToRemoveTimer);
   clearInterval(gameData.timer);
+
   socketIoObject
     .to(gameToRemoveTimer)
     .emit("updateTimer", { timeInSeconds: "", message: "" });

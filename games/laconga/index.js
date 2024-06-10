@@ -30,7 +30,10 @@ function nspLaConga(io) {
       socket.emit("updateRoomList", games);
       socket.emit(
         "message",
-        formatMessage("server bot", `Bienvenido ${user.username}!`)
+        formatMessage(
+          "server bot",
+          `Bienvenido a la sala principal ${user.username}!`
+        )
       );
     });
 
@@ -89,13 +92,14 @@ function nspLaConga(io) {
       }
     });
 
+    //Evento cuando un jugador se une a una room de juego
     socket.on("joinGameRoom", (roomName, password) => {
       const user = getCurrentUser(socket.id); //buscamos el usuario
       const gameToJoin = getGame(roomName).game; //buscamos el game al que queremos unirnos
 
       if (gameToJoin) {
         if (gameToJoin.players.length < 3) {
-          if (gameToJoin.wasStarted === "true") {
+          if (gameToJoin.wasStarted === true) {
             //Avisamos que el juego no esta en pausa
             socket.emit(
               "message",
@@ -171,8 +175,8 @@ function nspLaConga(io) {
       }
     });
 
-    //Evento cuando comienza el juego
-    socket.on("startGame", () => {
+    //Evento para preparar la mesa para el juego (limpiar la mesa, crear una nueva baraja, y repartir las cartas a los jugadores) a fin de que este pronta para iniciar el juego
+    socket.on("prepareRound", () => {
       const user = getCurrentUser(socket.id);
       const laConga = getGame(user.room).game;
 
@@ -182,7 +186,7 @@ function nspLaConga(io) {
           .to(user.room)
           .emit(
             "message",
-            formatMessage("server bot", `Las cartas ya fueron repartidas`)
+            formatMessage("server bot", `El juego ya ha iniciado`)
           );
       }
 
@@ -203,11 +207,14 @@ function nspLaConga(io) {
       if (laConga.hasWinPlayer(laConga.rules.score)) {
         return nsp
           .to(user.room)
-          .emit("message", formatMessage("server bot", `Hay un ganador`));
+          .emit(
+            "message",
+            formatMessage("server bot", `El juego ha terminado, hay un ganador`)
+          );
       }
 
-      laConga.startGame();
-      startTimer(user.room, nsp);
+      //Si no iniciamos el juego
+      laConga.prepareRound();
 
       //Actualizamos la lista de rooms
       const games = getAllGames();
@@ -226,6 +233,7 @@ function nspLaConga(io) {
         .emit("updatePlayers", laConga.players, laConga._gameStatus);
     });
 
+    //Evento cuando se pasan las cartas que estan en la mesa a la baraja
     socket.on("cardsForTableToDeck", () => {
       const user = getCurrentUser(socket.id);
       const room = user.room;
@@ -439,7 +447,7 @@ function nspLaConga(io) {
       }
     });
 
-    //Evento cuando se juega una carta
+    //Evento cuando se juega (se tira) una carta
     socket.on("playCard", (playedCardIndex) => {
       const user = getCurrentUser(socket.id);
       const room = user.room;
@@ -460,9 +468,17 @@ function nspLaConga(io) {
 
         //Si el juego no tiene un unico jugador reseteamos el timer y cambiamos de turno, si no no tendria sentido.
         if (laConga._players.length !== 1) {
-          stopTimer(room, nsp);
-          laConga.setTurn();
-          startTimer(room, nsp);
+          //Si el juego esta preparado quiere decir que no se esta jugando asi que solo deberemos cambiar el turno iniciar el contador y cambiar el estado del juego a iniciado.
+          if (laConga._gameStatus === "preparado") {
+            laConga.setTurn();
+            startTimer(room, nsp);
+            laConga._gameStatus = "iniciado";
+          } else if (laConga._gameStatus === "iniciado") {
+            stopTimer(room, nsp);
+            laConga.setTurn();
+
+            startTimer(room, nsp);
+          }
         }
 
         //Actualizamos las vistas
@@ -519,6 +535,7 @@ function nspLaConga(io) {
             currentGame.removePlayer(user.id);
             currentGame.setHand();
             currentGame.setTurn();
+
             startTimer(userRoom, nsp);
           } else {
             currentGame.removePlayer(user.id);
@@ -614,6 +631,7 @@ function nspLaConga(io) {
       const user = userLeave(socket.id); //Elimino al user del array de users, la funcion tambien lo devuelve
 
       if (user) {
+        console.log("se ejecuto player leave al desconectar");
         playerLeave(user);
       }
     });

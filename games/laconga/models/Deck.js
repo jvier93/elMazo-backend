@@ -17,6 +17,7 @@ class Deck {
   buildDeck() {
     const values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
     const suits = ["Oro", "Espada", "Basto", "Copa"];
+    //const suits = ["Oro", "Espada"];
     let cards = [];
     for (let suit of suits) {
       for (let value of values) {

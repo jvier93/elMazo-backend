@@ -19,7 +19,7 @@ class Game {
     this._table = new Table([]);
     this._cutTable = new CutTable([]);
     this._rules = new Rules(points, timePerPlayer);
-    this._wasStarted = "false";
+    this._wasStarted = false;
     this._gameStatus = "pausa"; //"iniciado" "pausa"
     this._indexOfPlayerTurn = 0;
     this._indexOfPlayerHand = 0;
@@ -143,7 +143,7 @@ class Game {
     }
   }
 
-  startGame() {
+  prepareRound() {
     //Eliminamos las cartas de todos los lugares
     if (this._gameStatus === "pausa") {
       this.players.map((player) => {
@@ -155,12 +155,15 @@ class Game {
 
       //Armamos todo el juego de nuevo
       this.deck.buildDeck();
+      //Entreveramos las cartas 2 veces
+      this.deck.shuffle();
       this.deck.shuffle();
       this.setHand();
-      this.setTurn(this.indexOfPlayerTurn);
+      //El jugador que es mano es quien debe tener el turno al iniciar la ronda
+      this.setTurn(this.indexOfPlayerHand);
       this.dealCards();
-      this.wasStarted = "true";
-      this.gameStatus = "iniciado";
+      this._wasStarted = true;
+      this._gameStatus = "preparado";
     }
   }
 
@@ -172,7 +175,7 @@ class Game {
     this.players = newPlayers;
   }
 
-  //quita las cartas del jugador las pasa a la baraja y lo remueve del juego
+  //quita las cartas del jugador las pasa a la baraja y lo remueve del juego, tambien debe ajustar el indexOfPlayerTurn e indexOfPlayerHand para que no quede defasado con el nuevo array de jugadores.
   removePlayer(socketId) {
     this.playerCardsToDeck(socketId);
     this.deck.shuffle();
@@ -184,6 +187,14 @@ class Game {
       let newPlayers = this.players.slice();
       newPlayers.splice(playerIndex, 1);
       this.players = newPlayers;
+    }
+
+    if (playerIndex < this.indexOfPlayerTurn) {
+      this.indexOfPlayerTurn--;
+    }
+
+    if (playerIndex < this.indexOfPlayerHand) {
+      this.indexOfPlayerHand--;
     }
   }
 
@@ -202,7 +213,6 @@ class Game {
 
   //reparte las cartas
   dealCards() {
-    this.gameStatus = "iniciado";
     this.players.map((player, index) => {
       //si el jugado llego al limite de puntos establecios en rules, no le reparte, ese jugador quedo fuera.
       if (!(player.score >= this.rules.score)) {
@@ -230,7 +240,7 @@ class Game {
     this.players[indexJugador].findAndBuildGames();
   }
 
-  //Ordena las cartas de un jugador segun el nuevo orden pasado.
+  //Ordena las cartas de un jugador segun el nuevo orden pasado (cuando el jugador cambia el orden de sus cartas en el front).
   sortPlayerCards(socketId, newOrder) {
     let indexJugador = this.players.findIndex((player) => {
       return player.socketId === socketId;
@@ -238,57 +248,32 @@ class Game {
     this.players[indexJugador].sortCards(newOrder);
   }
 
-  //Cambia el turno
+  //Version mejorada por chat gpt
   setTurn(playerTurn = null) {
-    if (playerTurn) {
+    // Verifica que playerTurn no sea null y que sea un número válido
+    if (typeof playerTurn === "number") {
       this.indexOfPlayerTurn = playerTurn;
-      return;
-    }
-    const qtyOfPlayers = this.players.length - 1;
-
-    if (this.players.length === 0) {
-      return;
-    }
-
-    if (
-      this.indexOfPlayerTurn >= qtyOfPlayers ||
-      this.indexOfPlayerTurn === null
-    ) {
-      this.indexOfPlayerTurn = 0;
-      for (let player of this.players) {
-        player.inTurn = false;
-      }
-      this.players[this.indexOfPlayerTurn].inTurn = true;
     } else {
-      this.indexOfPlayerTurn++;
-      for (let player of this.players) {
-        player.inTurn = false;
-      }
-      this.players[this.indexOfPlayerTurn].inTurn = true;
+      // Si no se proporciona playerTurn, se incrementa el índice de turno
+      this.indexOfPlayerTurn =
+        (this.indexOfPlayerTurn + 1) % this.players.length;
     }
 
+    // Asegúrate de que todos los jugadores no estén en turno
+    this.players.forEach((player) => (player.inTurn = false));
+
+    // Encuentra el próximo jugador con un score menor o igual a 100
     let playerInTurn = this.players[this.indexOfPlayerTurn];
-
-    while (playerInTurn.score > 100) {
-      if (
-        this.indexOfPlayerTurn >= qtyOfPlayers ||
-        this.indexOfPlayerTurn === null
-      ) {
-        this.indexOfPlayerTurn = 0;
-        for (let player of this.players) {
-          player.inTurn = false;
-        }
-        this.players[this.indexOfPlayerTurn].inTurn = true;
-      } else {
-        this.indexOfPlayerTurn++;
-        for (let player of this.players) {
-          player.inTurn = false;
-        }
-        this.players[this.indexOfPlayerTurn].inTurn = true;
-      }
-
+    let steps = 0;
+    while (playerInTurn.score > 100 && steps < this.players.length) {
+      this.indexOfPlayerTurn =
+        (this.indexOfPlayerTurn + 1) % this.players.length;
       playerInTurn = this.players[this.indexOfPlayerTurn];
+      steps++;
     }
+
+    // Establece el jugador actual en turno
+    playerInTurn.inTurn = true;
   }
 
   //Cambia quien es mano
