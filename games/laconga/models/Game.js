@@ -11,24 +11,53 @@ const CutTable = require("./CutTable");
 //comienza el juego
 
 class Game {
-  constructor(gameName, gamePassword = "", points, timePerPlayer) {
+  constructor(
+    socketConnectionNsp,
+    gameName,
+    gamePassword = "",
+    points,
+    timePerPlayer
+  ) {
+    // Definimos la propiedad _socketConnectionNsp utilizando Object.defineProperty para evitar
+    // que esta propiedad sea enumerable. Hacer que la propiedad no sea enumerable significa
+    // que no aparecerá cuando el objeto sea convertido a JSON o cuando se itere sobre las
+    // propiedades del objeto utilizando métodos como Object.keys() o for...in.
+    //
+    // Esto es importante porque los objetos de socket.io contienen referencias cíclicas y
+    // otros datos complejos que causan problemas durante la serialización. cuando envio el objeto de game entero hacia el front
+
+    Object.defineProperty(this, "_socketConnectionNsp", {
+      value: socketConnectionNsp,
+      writable: true,
+      configurable: true,
+      enumerable: false, // Hacemos que la propiedad no sea enumerable
+    });
     this._gameName = gameName;
     this._gamePassword = gamePassword;
+    this._timer = null;
     this._players = [];
     this._deck = new Deck();
     this._table = new Table([]);
     this._cutTable = new CutTable([]);
     this._rules = new Rules(points, timePerPlayer);
     this._wasStarted = false;
-    this._gameStatus = "pausa"; //"iniciado" "pausa"
+    this._gameStatus = "pausa"; //"iniciado" "preparado" "pausa"
     this._indexOfPlayerTurn = 0;
     this._indexOfPlayerHand = 0;
   }
 
   //Getters
 
+  get socketConnectionNsp() {
+    return this._socketConnectionNsp;
+  }
+
   get gamePassword() {
     return this._gamePassword;
+  }
+
+  get timer() {
+    return this._timer;
   }
 
   get gameStatus() {
@@ -73,8 +102,16 @@ class Game {
 
   //Setters
 
+  set socketConnectionNsp(newSocketConnectionNsp) {
+    this._socketConnectionNsp = newSocketConnectionNsp;
+  }
+
   set gamePassword(newGamePassword) {
     this._gamePassword = newGamePassword;
+  }
+
+  set timer(newTimer) {
+    this._timer = newTimer;
   }
 
   set gameStatus(newGameStatus) {
@@ -141,6 +178,41 @@ class Game {
     } else {
       return false;
     }
+  }
+
+  startTimer() {
+    let timeInSeconds = this._rules.timePerPlayer;
+    const timer = setInterval(() => {
+      this._socketConnectionNsp.to(this._gameName).emit("updateTimer", {
+        timeInSeconds,
+        message: `Juega: ${this._players[this._indexOfPlayerTurn]._name} `,
+      });
+
+      if (timeInSeconds === 0) {
+        timeInSeconds = this._rules.timePerPlayer;
+        this.setTurn();
+        this._socketConnectionNsp
+          .to(this._gameName)
+          .emit("updatePlayers", this._players, this._gameStatus);
+
+        this._socketConnectionNsp.to(this._gameName).emit("updateTimer", {
+          timeInSeconds,
+          message: `Juega: ${this._players[this._indexOfPlayerTurn]._name} `,
+        });
+      }
+
+      timeInSeconds -= 1;
+    }, 1000);
+    this._timer = timer;
+  }
+
+  stopTimer() {
+    clearInterval(this._timer);
+
+    this._socketConnectionNsp
+      //Game name coincide con el nombre de la sala.
+      .to(this._gameName)
+      .emit("updateTimer", { timeInSeconds: "", message: "" });
   }
 
   prepareRound() {

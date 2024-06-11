@@ -10,8 +10,6 @@ const {
   getGame,
   getAllGames,
   removeGame,
-  startTimer,
-  stopTimer,
 } = require("./../../utils/Games");
 
 function nspLaConga(io) {
@@ -45,7 +43,13 @@ function nspLaConga(io) {
       //si no existe un game
       if (!currentGame) {
         //Creamos un game y le añadimos el user como nuevo player
-        const laConga = createGame(roomName, password, points, timePerPlayer);
+        const laConga = createGame(
+          nsp,
+          roomName,
+          password,
+          points,
+          timePerPlayer
+        );
 
         laConga.addPlayer(user);
         //Con esta funcion hacemos admin a ese primer jugador
@@ -96,7 +100,7 @@ function nspLaConga(io) {
     //Evento cuando un jugador se une a una room de juego
     socket.on("joinGameRoom", (roomName, password) => {
       const user = getCurrentUser(socket.id); //buscamos el usuario
-      const gameToJoin = getGame(roomName).game; //buscamos el game al que queremos unirnos
+      const gameToJoin = getGame(roomName); //buscamos el game al que queremos unirnos
 
       if (gameToJoin) {
         if (gameToJoin.players.length < 3) {
@@ -179,7 +183,7 @@ function nspLaConga(io) {
     //Evento para preparar la mesa para el juego (limpiar la mesa, crear una nueva baraja, y repartir las cartas a los jugadores) a fin de que este pronta para iniciar el juego
     socket.on("prepareRound", () => {
       const user = getCurrentUser(socket.id);
-      const laConga = getGame(user.room).game;
+      const laConga = getGame(user.room);
 
       //Si el juego esta iniciado notificarlo y retronar
       if (laConga.gameStatus === "iniciado") {
@@ -238,7 +242,7 @@ function nspLaConga(io) {
     socket.on("cardsForTableToDeck", () => {
       const user = getCurrentUser(socket.id);
       const room = user.room;
-      const laConga = getGame(room).game;
+      const laConga = getGame(room);
 
       if (laConga._gameStatus === "pausa") {
         return;
@@ -251,7 +255,7 @@ function nspLaConga(io) {
     socket.on("raiseCard", () => {
       const user = getCurrentUser(socket.id);
       const room = user.room;
-      const laConga = getGame(room).game;
+      const laConga = getGame(room);
 
       if (laConga._gameStatus === "pausa") {
         return;
@@ -297,7 +301,7 @@ function nspLaConga(io) {
     socket.on("raiseTableCard", () => {
       const user = getCurrentUser(socket.id);
       const room = user.room;
-      const laConga = getGame(room).game;
+      const laConga = getGame(room);
 
       if (laConga._gameStatus === "pausa") {
         return;
@@ -416,7 +420,7 @@ function nspLaConga(io) {
       const user = getCurrentUser(socket.id);
 
       const room = user.room;
-      const laConga = getGame(room).game;
+      const laConga = getGame(room);
 
       const player = laConga.findPlayer(socket.id);
       //Si es el turno del jugador este tiene dos juegos y en su mano hay 8 cartas
@@ -429,7 +433,7 @@ function nspLaConga(io) {
         laConga.cutTable.addCard(player.playCard(indexOfCardToCutGame));
         //Contamos los puntos
         laConga.scorePoints();
-        stopTimer(room, nsp);
+        laConga.stopTimer();
         laConga.gameStatus = "pausa";
 
         notifyWinOrLose({ nsp, game: laConga, user });
@@ -452,7 +456,7 @@ function nspLaConga(io) {
     socket.on("playCard", (playedCardIndex) => {
       const user = getCurrentUser(socket.id);
       const room = user.room;
-      const laConga = getGame(room).game;
+      const laConga = getGame(room);
 
       if (laConga._gameStatus === "pausa") {
         return;
@@ -472,13 +476,13 @@ function nspLaConga(io) {
           //Si el juego esta preparado quiere decir que no se esta jugando asi que solo deberemos cambiar el turno iniciar el contador y cambiar el estado del juego a iniciado.
           if (laConga._gameStatus === "preparado") {
             laConga.setTurn();
-            startTimer(room, nsp);
+            laConga.startTimer();
             laConga._gameStatus = "iniciado";
           } else if (laConga._gameStatus === "iniciado") {
-            stopTimer(room, nsp);
+            laConga.stopTimer();
             laConga.setTurn();
 
-            startTimer(room, nsp);
+            laConga.startTimer();
           }
         }
 
@@ -507,7 +511,7 @@ function nspLaConga(io) {
     //Evento cuando ordenamos cartas en nuestra mano
     socket.on("reorderCards", (cartas) => {
       const room = getCurrentUser(socket.id).room;
-      const laConga = getGame(room).game;
+      const laConga = getGame(room);
       laConga.sortPlayerCards(socket.id, cartas);
       laConga.findAndBuildGames(socket.id);
 
@@ -523,7 +527,7 @@ function nspLaConga(io) {
       const userRoom = user.room;
       if (userRoom !== "#000") {
         //Busco la instancia en la que estaba participando
-        const currentGame = getGame(userRoom).game;
+        const currentGame = getGame(userRoom);
 
         if (currentGame._gameStatus !== "pausa") {
           //Si el jugador que se fue tenia el turno o era mano debemos setear de nuevo estos valores al siguiente jugador en la instancia ("lista"), ANTES de eliminarlo de la misma
@@ -532,12 +536,12 @@ function nspLaConga(io) {
               user.id &&
             currentGame._players.length > 1
           ) {
-            stopTimer(userRoom, nsp);
+            currentGame.stopTimer();
             currentGame.removePlayer(user.id);
             currentGame.setHand();
             currentGame.setTurn();
 
-            startTimer(userRoom, nsp);
+            currentGame.startTimer();
           } else {
             currentGame.removePlayer(user.id);
             currentGame.setHand();
@@ -585,7 +589,7 @@ function nspLaConga(io) {
           nsp.emit("updateRoomList", games);
         } else if (currentGame._players.length === 1) {
           //Detenemos el timer ¿para que querriamos uno si estamos solos en la sala? y tambien pausamos el juego, solo no vamos a jugar.
-          stopTimer(userRoom, nsp);
+          currentGame.stopTimer();
           currentGame.gameStatus = "pausa";
           //no sabemos si el jugador que se desconecto es el admin, por ello chequeamos y hacemos admin al primero
           currentGame.checkAdmin();
