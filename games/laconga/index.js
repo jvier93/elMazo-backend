@@ -27,6 +27,7 @@ function nspLaConga(io) {
 
       //Para obtener la lista de rooms existente
       const games = getAllGames();
+
       socket.emit("updateRoomList", games);
       socket.emit(
         "message",
@@ -43,7 +44,7 @@ function nspLaConga(io) {
 
       //si no existe un game
       if (!currentGame) {
-        //Creamos un game (la room) y le añadimos el user como nuevo player
+        //Creamos un game y le añadimos el user como nuevo player
         const laConga = createGame(roomName, password, points, timePerPlayer);
 
         laConga.addPlayer(user);

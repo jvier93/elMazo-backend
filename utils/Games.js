@@ -10,7 +10,7 @@ function createGame(nameRoom, gamePassword = "", points, timePerPlayer) {
   return laconga;
 }
 
-//Busca y retorna el game que se encuentra en el array de games correspondiente a esa rrom, si no lo encuentra retorna null.
+//Busca y retorna el game que se encuentra en el array de games correspondiente a esa room, si no lo encuentra retorna null.
 function getGame(room) {
   const indexCurrentGame = games.findIndex((gameRoom) => {
     return gameRoom.game._gameName === room;
