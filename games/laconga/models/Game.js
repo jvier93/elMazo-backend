@@ -217,7 +217,7 @@ class Game {
 
   prepareRound() {
     //Eliminamos las cartas de todos los lugares
-    if (this._gameStatus === "pausa") {
+    if (this._gameStatus === "pausa" && !this._wasStarted) {
       this.players.map((player) => {
         player.removeAllCards();
       });
@@ -268,6 +268,12 @@ class Game {
     if (playerIndex < this.indexOfPlayerHand) {
       this.indexOfPlayerHand--;
     }
+  }
+
+  resetPlayersScore() {
+    this._players.forEach((player) => {
+      player._score = 0;
+    });
   }
 
   //quita las cartas del jugador las pasa a la baraja

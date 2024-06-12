@@ -590,7 +590,10 @@ function nspLaConga(io) {
         } else if (currentGame._players.length === 1) {
           //Detenemos el timer ¿para que querriamos uno si estamos solos en la sala? y tambien pausamos el juego, solo no vamos a jugar.
           currentGame.stopTimer();
-          currentGame.gameStatus = "pausa";
+          currentGame._gameStatus = "pausa";
+          //Para este caso cambiamos a que el juego no fue iniciado asi se pueden sumar nuevos jugadores y reseteamos los puntos de jugadores
+          currentGame._wasStarted = false;
+          currentGame.resetPlayersScore();
           //no sabemos si el jugador que se desconecto es el admin, por ello chequeamos y hacemos admin al primero
           currentGame.checkAdmin();
 
