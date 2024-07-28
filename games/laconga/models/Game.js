@@ -11,19 +11,13 @@ const CutTable = require("./CutTable");
 //comienza el juego
 
 class Game {
-  constructor(
-    socketConnectionNsp,
-    gameName,
-    gamePassword = "",
-    points,
-    timePerPlayer
-  ) {
-    // Definimos la propiedad _socketConnectionNsp utilizando Object.defineProperty para evitar
-    // que esta propiedad sea enumerable. Hacer que la propiedad no sea enumerable significa
-    // que no aparecerá cuando el objeto sea convertido a JSON o cuando se itere sobre las
+  constructor(socketConnectionNsp, gameName, gameOverScore, timePerPlayer) {
+    // Definimos la propiedad _socketConnectionNsp y _timer utilizando Object.defineProperty para evitar
+    // que estas propiedades sean enumerables. Esto significa
+    // que no aparecerán cuando el objeto sea convertido a JSON o cuando se itere sobre las
     // propiedades del objeto utilizando métodos como Object.keys() o for...in.
     //
-    // Esto es importante porque los objetos de socket.io contienen referencias cíclicas y
+    // Esto es importante porque los objetos como socket.io y timer contienen referencias cíclicas y
     // otros datos complejos que causan problemas durante la serialización. cuando envio el objeto de game entero hacia el front
 
     Object.defineProperty(this, "_socketConnectionNsp", {
@@ -32,14 +26,21 @@ class Game {
       configurable: true,
       enumerable: false, // Hacemos que la propiedad no sea enumerable
     });
+
+    Object.defineProperty(this, "_timer", {
+      value: socketConnectionNsp,
+      writable: true,
+      configurable: true,
+      enumerable: false, // Hacemos que la propiedad no sea enumerable
+    });
     this._gameName = gameName;
-    this._gamePassword = gamePassword;
+    this._gamePassword = "";
     this._timer = null;
     this._players = [];
     this._deck = new Deck();
     this._table = new Table([]);
     this._cutTable = new CutTable([]);
-    this._rules = new Rules(points, timePerPlayer);
+    this._rules = new Rules(gameOverScore, timePerPlayer);
     this._wasStarted = false;
     this._gameStatus = "pausa"; //"iniciado" "preparado" "pausa"
     this._indexOfPlayerTurn = 0;
@@ -165,11 +166,11 @@ class Game {
   }
 
   //Metodo que evalua si existe un ganador en el juego (si solo un jugador tiene menos de 100 puntos)
-  hasWinPlayer(scoreLimit) {
+  hasWinPlayer(gameOverScore) {
     if (this.players.length > 1) {
       let playersKeepPlaying = 0;
       this.players.map((player) => {
-        if (player.score < scoreLimit) {
+        if (player.score < gameOverScore) {
           playersKeepPlaying++;
         }
       });
@@ -182,10 +183,17 @@ class Game {
 
   startTimer() {
     let timeInSeconds = this._rules.timePerPlayer;
+
+    //Antes de iniciar el timer en si enviamos el evento para visualizar en el frontend el primer "tic" de tiempo
+    this._socketConnectionNsp.to(this._gameName).emit("updateTimer", {
+      timeInSeconds,
+    });
+
     const timer = setInterval(() => {
+      timeInSeconds -= 1;
+
       this._socketConnectionNsp.to(this._gameName).emit("updateTimer", {
         timeInSeconds,
-        message: `Juega: ${this._players[this._indexOfPlayerTurn]._name} `,
       });
 
       if (timeInSeconds === 0) {
@@ -197,11 +205,8 @@ class Game {
 
         this._socketConnectionNsp.to(this._gameName).emit("updateTimer", {
           timeInSeconds,
-          message: `Juega: ${this._players[this._indexOfPlayerTurn]._name} `,
         });
       }
-
-      timeInSeconds -= 1;
     }, 1000);
     this._timer = timer;
   }
@@ -209,15 +214,15 @@ class Game {
   stopTimer() {
     clearInterval(this._timer);
 
-    this._socketConnectionNsp
-      //Game name coincide con el nombre de la sala.
-      .to(this._gameName)
-      .emit("updateTimer", { timeInSeconds: "", message: "" });
+    //Notificamos al frontend que se detuvo el timer
+    this._socketConnectionNsp.to(this._gameName).emit("updateTimer", {
+      timeInSeconds: "",
+    });
   }
 
   prepareRound() {
     //Eliminamos las cartas de todos los lugares
-    if (this._gameStatus === "pausa" && !this._wasStarted) {
+    if (this._gameStatus === "pausa") {
       this.players.map((player) => {
         player.removeAllCards();
       });
@@ -228,8 +233,8 @@ class Game {
       //Armamos todo el juego de nuevo
       this.deck.buildDeck();
       //Entreveramos las cartas 2 veces
-      this.deck.shuffle();
-      this.deck.shuffle();
+      // this.deck.shuffle();
+      // this.deck.shuffle();
       this.setHand();
       //El jugador que es mano es quien debe tener el turno al iniciar la ronda
       this.setTurn(this.indexOfPlayerHand);
@@ -293,7 +298,7 @@ class Game {
   dealCards() {
     this.players.map((player, index) => {
       //si el jugado llego al limite de puntos establecios en rules, no le reparte, ese jugador quedo fuera.
-      if (!(player.score >= this.rules.score)) {
+      if (!(player.score >= this.rules.gameOverScore)) {
         //si el jugador es mano, le da 8 cartas
         if (this.indexOfPlayerHand === index) {
           while (player.hand.length < 8) {

@@ -5,15 +5,13 @@ const games = [];
 function createGame(
   socketConnectionNsp,
   nameRoom,
-  gamePassword = "",
-  points,
+  gameOverScore,
   timePerPlayer
 ) {
   const laConga = new Game(
     socketConnectionNsp,
     nameRoom,
-    gamePassword,
-    points,
+    gameOverScore,
     timePerPlayer
   );
 

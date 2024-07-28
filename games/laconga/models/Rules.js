@@ -1,6 +1,6 @@
 class Rules {
-  constructor(score, timePerPlayer) {
-    this._score = score;
+  constructor(gameOverScore, timePerPlayer) {
+    this._gameOverScore = gameOverScore;
     this._timePerPlayer = timePerPlayer;
   }
 
@@ -12,8 +12,8 @@ class Rules {
     return this._timePerPlayer;
   }
 
-  get score() {
-    return this._score;
+  get gameOverScore() {
+    return this._gameOverScore;
   }
 }
 

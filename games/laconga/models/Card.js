@@ -1,5 +1,6 @@
 class Card {
   constructor(number, suit) {
+    this._id = `${number}-${suit}`;
     this._suit = suit;
     this._number = number;
     this._imgBack = "./imagenesBaraja/reverso.gif";
@@ -9,6 +10,10 @@ class Card {
     this._imgFrontGame = `./imagenesBaraja/${suit.toLowerCase()}/${number}${suit.toLowerCase()}-game.png`;
     this._imgFrontGame75 = `./imagenesBaraja/${suit.toLowerCase()}/${number}${suit.toLowerCase()}-game75.png`;
     this._inGame = "";
+  }
+
+  get id() {
+    return this.id;
   }
 
   get inGame() {
@@ -25,6 +30,10 @@ class Card {
 
   set inGame(newInGame) {
     this._inGame = newInGame;
+  }
+
+  set id(newId) {
+    return (this._id = newId);
   }
 }
 
