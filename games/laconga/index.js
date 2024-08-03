@@ -102,7 +102,7 @@ function nspLaConga(io) {
       if (gameToJoin) {
         if (gameToJoin.players.length < 4) {
           if (gameToJoin.wasStarted === true) {
-            //Avisamos que el juego no esta en pausa
+            //Avisamos que el juego no esta en pause
             socket.emit(
               "message",
               formatMessage("server bot", `Este juego ya comenzo`)
@@ -166,17 +166,16 @@ function nspLaConga(io) {
 
     //Evento para preparar la mesa para el juego (limpiar la mesa, crear una nueva baraja, y repartir las cartas a los jugadores) a fin de que este pronta para iniciar el juego
     socket.on("prepareRound", () => {
-      console.log("se ejecuta prepare round");
       const user = getCurrentUser(socket.id);
       const laConga = getGame(user.room);
 
-      //Si el juego esta iniciado notificarlo y retronar
-      if (laConga.gameStatus === "iniciado") {
+      //Si el juego esta running notificarlo y retronar
+      if (laConga.gameStatus === "running") {
         return nsp
           .to(user.room)
           .emit(
             "message",
-            formatMessage("server bot", `El juego ya ha iniciado`)
+            formatMessage("server bot", `El juego ya ha running`)
           );
       }
 
@@ -229,7 +228,7 @@ function nspLaConga(io) {
       const room = user.room;
       const laConga = getGame(room);
 
-      if (laConga._gameStatus === "pausa") {
+      if (laConga._gameStatus === "pause") {
         return;
       }
 
@@ -242,7 +241,7 @@ function nspLaConga(io) {
       const room = user.room;
       const laConga = getGame(room);
 
-      if (laConga._gameStatus === "pausa") {
+      if (laConga._gameStatus === "pause") {
         return;
       }
 
@@ -288,7 +287,7 @@ function nspLaConga(io) {
       const room = user.room;
       const laConga = getGame(room);
 
-      if (laConga._gameStatus === "pausa") {
+      if (laConga._gameStatus === "pause") {
         return;
       }
 
@@ -330,10 +329,6 @@ function nspLaConga(io) {
           return playersDetail;
         };
 
-        const playersDetail = extractPointsDetailOfPlayers(
-          game.players,
-          scoreLimit
-        );
         const gameHasWinPlayer = game.hasWinPlayer(scoreLimit);
 
         if (gameHasWinPlayer) {
@@ -351,25 +346,21 @@ function nspLaConga(io) {
             //si el player que estamos procesando en este step concide con el que gano el juego
             if (player.socketId === playerWinnerSocketId) {
               //le enviamos un mensaje personalizado.
-              nsp.to(player.socketId).emit("playerNotification", {
-                showModal: true,
-                modalMessage: {
+              nsp.to(player.socketId).emit("gameResultsNotification", {
+                show: true,
+                message: {
                   title: "Has ganado el juego",
-                  body: "pulsa aceptar para volver a la sala principal",
+                  body: "pulsa aceptar para cerrar esta ventana",
                 },
-                scoreDetails: playersDetail,
-                modalMode: "endGameNotification",
               });
               //al resto le enviamos un mensaje con el nombre del ganador.
             } else {
-              nsp.to(player.socketId).emit("playerNotification", {
-                showModal: true,
-                modalMessage: {
+              nsp.to(player.socketId).emit("gameResultsNotification", {
+                modal: true,
+                message: {
                   title: `${playerWinnerName} ha ganado el juego`,
-                  body: "pulsa aceptar para volver a la sala principal",
+                  body: "pulsa aceptar para cerrar esta ventana",
                 },
-                scoreDetails: playersDetail,
-                modalMode: "endGameNotification",
               });
             }
           });
@@ -379,24 +370,20 @@ function nspLaConga(io) {
 
         game.players.map((player) => {
           if (player.score >= scoreLimit) {
-            nsp.to(player.socketId).emit("playerNotification", {
-              showModal: true,
-              modalMessage: {
+            nsp.to(player.socketId).emit("gameResultsNotification", {
+              show: true,
+              message: {
                 title: `${user.username} gano esta ronda`,
                 body: `llegaste al limite de puntos - ${scoreLimit} puedes salir pulsando aceptar`,
               },
-              scoreDetails: playersDetail,
-              modalMode: "endRoundNotification",
             });
           } else {
-            nsp.to(player.socketId).emit("playerNotification", {
-              showModal: true,
-              modalMessage: {
+            nsp.to(player.socketId).emit("gameResultsNotification", {
+              show: true,
+              message: {
                 title: `${user.username} gano esta ronda`,
                 body: "",
               },
-              scoreDetails: playersDetail,
-              modalMode: "endRoundNotification",
             });
           }
         });
@@ -419,7 +406,7 @@ function nspLaConga(io) {
         //Contamos los puntos
         laConga.scorePoints();
         laConga.stopTimer();
-        laConga.gameStatus = "pausa";
+        laConga.gameStatus = "pause";
 
         notifyWinOrLose({ nsp, game: laConga, user });
 
@@ -442,7 +429,7 @@ function nspLaConga(io) {
       const room = user.room;
       const laConga = getGame(room);
 
-      if (laConga._gameStatus === "pausa") {
+      if (laConga._gameStatus === "pause") {
         return;
       }
 
@@ -457,12 +444,12 @@ function nspLaConga(io) {
 
         //Si el juego no tiene un unico jugador reseteamos el timer y cambiamos de turno, si no no tendria sentido.
         if (laConga._players.length !== 1) {
-          //Si el juego esta preparado quiere decir que no se esta jugando asi que solo deberemos cambiar el turno iniciar el contador y cambiar el estado del juego a iniciado.
-          if (laConga._gameStatus === "preparado") {
+          //Si el juego esta ready quiere decir que no se esta jugando asi que solo deberemos cambiar el turno iniciar el contador y cambiar el estado del juego a running.
+          if (laConga._gameStatus === "ready") {
             laConga.setTurn();
             laConga.startTimer();
-            laConga._gameStatus = "iniciado";
-          } else if (laConga._gameStatus === "iniciado") {
+            laConga._gameStatus = "running";
+          } else if (laConga._gameStatus === "running") {
             laConga.stopTimer();
             laConga.setTurn();
 
@@ -514,7 +501,7 @@ function nspLaConga(io) {
         //Busco la instancia en la que estaba participando
         const currentGame = getGame(userRoom);
 
-        if (currentGame._gameStatus !== "pausa") {
+        if (currentGame._gameStatus !== "pause") {
           //Si el jugador que se fue tenia el turno o era mano debemos setear de nuevo estos valores al siguiente jugador en la instancia ("lista"), ANTES de eliminarlo de la misma
           if (
             currentGame._players[currentGame._indexOfPlayerTurn]._socketId ===
@@ -533,7 +520,7 @@ function nspLaConga(io) {
             currentGame.setHand();
           }
         }
-        if (currentGame._gameStatus === "pausa") {
+        if (currentGame._gameStatus === "pause") {
           currentGame.removePlayer(user.id);
           currentGame.setHand();
         }
@@ -574,10 +561,10 @@ function nspLaConga(io) {
           const games = getAllGames();
           nsp.emit("updateRoomsList", games);
         } else if (currentGame._players.length === 1) {
-          //Detenemos el timer ¿para que querriamos uno si estamos solos en la sala? y tambien pausamos el juego, solo no vamos a jugar.
+          //Detenemos el timer ¿para que querriamos uno si estamos solos en la sala? y tambien pausemos el juego, solo no vamos a jugar.
           currentGame.stopTimer();
-          currentGame._gameStatus = "pausa";
-          //Para este caso cambiamos a que el juego no fue iniciado asi se pueden sumar nuevos jugadores y reseteamos los puntos de jugadores
+          currentGame._gameStatus = "pause";
+          //Para este caso cambiamos a que el juego no fue running asi se pueden sumar nuevos jugadores y reseteamos los puntos de jugadores
           currentGame._wasStarted = false;
           currentGame.resetPlayersScore();
           //no sabemos si el jugador que se desconecto es el admin, por ello chequeamos y hacemos admin al primero

@@ -42,7 +42,7 @@ class Game {
     this._cutTable = new CutTable([]);
     this._rules = new Rules(gameOverScore, timePerPlayer);
     this._wasStarted = false;
-    this._gameStatus = "pausa"; //"iniciado" "preparado" "pausa"
+    this._gameStatus = "pause"; //"running" "ready" "pause"
     this._indexOfPlayerTurn = 0;
     this._indexOfPlayerHand = 0;
   }
@@ -222,7 +222,7 @@ class Game {
 
   prepareRound() {
     //Eliminamos las cartas de todos los lugares
-    if (this._gameStatus === "pausa") {
+    if (this._gameStatus === "pause") {
       this.players.map((player) => {
         player.removeAllCards();
       });
@@ -233,14 +233,14 @@ class Game {
       //Armamos todo el juego de nuevo
       this.deck.buildDeck();
       //Entreveramos las cartas 2 veces
-      // this.deck.shuffle();
-      // this.deck.shuffle();
+      this.deck.shuffle();
+      this.deck.shuffle();
       this.setHand();
       //El jugador que es mano es quien debe tener el turno al iniciar la ronda
       this.setTurn(this.indexOfPlayerHand);
       this.dealCards();
       this._wasStarted = true;
-      this._gameStatus = "preparado";
+      this._gameStatus = "ready";
     }
   }
 
