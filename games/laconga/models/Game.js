@@ -199,9 +199,8 @@ class Game {
       if (timeInSeconds === 0) {
         timeInSeconds = this._rules.timePerPlayer;
         this.setTurn();
-        this._socketConnectionNsp
-          .to(this._gameName)
-          .emit("updatePlayers", this._players, this._gameStatus);
+
+        this._socketConnectionNsp.to(this._gameName).emit("updateGame", this);
 
         this._socketConnectionNsp.to(this._gameName).emit("updateTimer", {
           timeInSeconds,
@@ -233,8 +232,8 @@ class Game {
       //Armamos todo el juego de nuevo
       this.deck.buildDeck();
       //Entreveramos las cartas 2 veces
-      this.deck.shuffle();
-      this.deck.shuffle();
+      // this.deck.shuffle();
+      // this.deck.shuffle();
       this.setHand();
       //El jugador que es mano es quien debe tener el turno al iniciar la ronda
       this.setTurn(this.indexOfPlayerHand);

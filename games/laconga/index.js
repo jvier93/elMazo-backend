@@ -76,10 +76,7 @@ function nspLaConga(io) {
             formatMessage("server bot", `${user.username} se ha unido al juego`)
           );
 
-        nsp.to(gameName).emit("updateDeck", laConga.deck);
-        nsp
-          .to(gameName)
-          .emit("updatePlayers", laConga.players, laConga._gameStatus);
+        nsp.to(gameName).emit("updateGame", laConga);
       } else {
         //Avisamos que ya existe un juego con ese nombre
         socket.emit(
@@ -141,13 +138,7 @@ function nspLaConga(io) {
               )
             );
 
-          nsp.to(gameName).emit("updateDeck", gameToJoin.deck);
-
-          //quitar luego
-          // if (gameToJoin.players.length === 4) gameToJoin.prepareRound();
-          nsp
-            .to(gameName)
-            .emit("updatePlayers", gameToJoin.players, gameToJoin._gameStatus);
+          nsp.to(gameName).emit("updateGame", gameToJoin);
         } else {
           //Avisamos que ya se alcanzo el limite de players
           socket.emit(
@@ -212,14 +203,7 @@ function nspLaConga(io) {
       nsp
         .to(user.room)
         .emit("message", formatMessage("server bot", `El juego ha comenzado!`));
-      nsp.to(user.room).emit("updateDeck", laConga.deck);
-      nsp.to(user.room).emit("updateTable", laConga.table);
-      nsp.to(user.room).emit("updateCutTable", laConga.cutTable);
-      nsp.to(user.room).emit("showFrontCards", false);
-      nsp.to(user.room).emit("updateGameStatus", laConga._gameStatus);
-      nsp
-        .to(user.room)
-        .emit("updatePlayers", laConga.players, laConga._gameStatus);
+      nsp.to(user.room).emit("updateGame", laConga);
     });
 
     //Evento cuando se pasan las cartas que estan en la mesa a la baraja
@@ -250,14 +234,9 @@ function nspLaConga(io) {
       if (player.inTurn && player.hand.length === 7) {
         player.recieveCard(laConga.deck.dealOne());
         laConga.findAndBuildGames(socket.id);
-        nsp
-          .to(user.room)
-          .emit("updatePlayers", laConga.players, laConga._gameStatus);
 
         if (laConga.deck.cards.length === 0) {
           laConga.tableToDeck();
-          nsp.to(user.room).emit("updateDeck", laConga.deck);
-          nsp.to(user.room).emit("updateTable", laConga.table);
           nsp
             .to(user.room)
             .emit(
@@ -267,9 +246,9 @@ function nspLaConga(io) {
                 "Se transfirio de la mesa a la baraja"
               )
             );
-        } else {
-          nsp.to(user.room).emit("updateDeck", laConga.deck);
         }
+
+        nsp.to(user.room).emit("updateGame", laConga);
       } else {
         socket.emit(
           "message",
@@ -296,10 +275,7 @@ function nspLaConga(io) {
       if (player.inTurn && player.hand.length === 7) {
         player.recieveCard(laConga.table.removeCard());
         laConga.findAndBuildGames(socket.id);
-        nsp
-          .to(user.room)
-          .emit("updatePlayers", laConga.players, laConga._gameStatus);
-        nsp.to(user.room).emit("updateTable", laConga.table);
+        nsp.to(user.room).emit("updateGame", laConga);
       } else {
         socket.emit(
           "message",
@@ -411,11 +387,7 @@ function nspLaConga(io) {
         notifyWinOrLose({ nsp, game: laConga, user });
 
         //Actualizamos las vistas
-        nsp.to(user.room).emit("updateGameStatus", laConga._gameStatus);
-        nsp
-          .to(user.room)
-          .emit("updatePlayers", laConga.players, laConga._gameStatus);
-        nsp.to(user.room).emit("showFrontCards", true);
+        nsp.to(user.room).emit("updateGame", laConga);
 
         //Actualizamos la lista de rooms ya que el juego se pauso (el estado del juego lo mostramos en la lista de rooms)
         const games = getAllGames();
@@ -458,11 +430,7 @@ function nspLaConga(io) {
         }
 
         //Actualizamos las vistas
-        nsp.to(user.room).emit("updateGameStatus", laConga._gameStatus);
-        nsp
-          .to(user.room)
-          .emit("updatePlayers", laConga.players, laConga._gameStatus);
-        nsp.to(user.room).emit("updateTable", laConga.table);
+        nsp.to(user.room).emit("updateGame", laConga);
         nsp
           .to(user.room)
           .emit(
@@ -487,7 +455,7 @@ function nspLaConga(io) {
       laConga.sortPlayerCards(socket.id, cartas);
       laConga.findAndBuildGames(socket.id);
 
-      socket.emit("updateMyHand", laConga.players);
+      nsp.to(room).emit("updateGame", laConga);
     });
 
     socket.on("playerLeave", () => {
@@ -537,16 +505,8 @@ function nspLaConga(io) {
           //no sabemos si el jugador que se desconecto es el admin, por ello chequeamos y hacemos admin al primero
           currentGame.checkAdmin();
 
-          //Actualizamos la baraja ya que las cartas que tenia el jugador volvieron a la baraja
-          nsp.to(userRoom).emit("updateDeck", currentGame.deck);
-          //Actualizamos la vista de los jugadores que aun quedan en esta estancia
-          nsp
-            .to(userRoom)
-            .emit(
-              "updatePlayers",
-              currentGame.players,
-              currentGame._gameStatus
-            );
+          //Actualizamos la vista del juego completo ya que cambió el estado
+          nsp.to(userRoom).emit("updateGame", currentGame);
           nsp
             .to(userRoom)
             .emit(
@@ -570,18 +530,8 @@ function nspLaConga(io) {
           //no sabemos si el jugador que se desconecto es el admin, por ello chequeamos y hacemos admin al primero
           currentGame.checkAdmin();
 
-          //Actualizamos la baraja ya que las cartas que tenia el jugador volvieron a la baraj
-          nsp.to(userRoom).emit("updateDeck", currentGame.deck);
-          //Enviamos la actualizacion de estado del game
-          nsp.to(userRoom).emit("updateGameStatus", currentGame._gameStatus);
-          //Actualizamos la vista de los jugadores que aun quedan en esta estancia
-          nsp
-            .to(userRoom)
-            .emit(
-              "updatePlayers",
-              currentGame.players,
-              currentGame._gameStatus
-            );
+          //Actualizamos la vista del juego completo ya que cambió el estado
+          nsp.to(userRoom).emit("updateGame", currentGame);
           nsp
             .to(userRoom)
             .emit(
